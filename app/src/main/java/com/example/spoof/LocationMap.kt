@@ -163,11 +163,24 @@ class LocationMap(
         fun configure(context: Context) {
             val config = Configuration.getInstance()
             config.load(context, context.getSharedPreferences("osmdroid", Context.MODE_PRIVATE))
-            // OSM's tile usage policy requires an identifying user agent.
-            config.userAgentValue = context.packageName
+            // OSM's tile usage policy requires a user agent that identifies the app and a
+            // contact; placeholder-looking ones (e.g. a bare "com.example.*") get 403 tiles.
+            config.userAgentValue = userAgent(context)
             val base = File(context.cacheDir, "osmdroid")
             config.osmdroidBasePath = base
-            config.osmdroidTileCache = File(base, "tiles")
+            // New directory so tiles cached under the old, blocked user agent are dropped.
+            config.osmdroidTileCache = File(base, "tiles-v2")
+            File(base, "tiles").deleteRecursively()
+        }
+
+        private fun userAgent(context: Context): String {
+            val version = try {
+                context.packageManager.getPackageInfo(context.packageName, 0).versionName
+            } catch (_: Exception) {
+                null
+            } ?: "dev"
+            return "Spoof/$version (Android mock location debug tool; " +
+                "+https://github.com/bambamcam1003/spoof)"
         }
     }
 }
