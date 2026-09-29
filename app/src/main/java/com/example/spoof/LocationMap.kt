@@ -5,7 +5,6 @@ import android.content.Context
 import androidx.core.content.ContextCompat
 import org.osmdroid.config.Configuration
 import org.osmdroid.events.MapEventsReceiver
-import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.CustomZoomButtonsController
 import org.osmdroid.views.MapView
@@ -15,7 +14,7 @@ import org.osmdroid.views.overlay.Polyline
 import java.io.File
 
 /**
- * Wraps an OpenStreetMap [MapView] used to pick the mock location and destination.
+ * Wraps an osmdroid [MapView] used to pick the mock location and destination.
  *
  * Taps call [onTap]; dragging a marker calls [onLocationDragged] / [onDestinationDragged];
  * tapping the destination flag calls [onDestinationCleared].
@@ -70,7 +69,6 @@ class LocationMap(
     private var hasCurrent = false
 
     init {
-        mapView.setTileSource(TileSourceFactory.MAPNIK)
         mapView.setMultiTouchControls(true)
         mapView.zoomController.setVisibility(CustomZoomButtonsController.Visibility.SHOW_AND_FADEOUT)
         mapView.isTilesScaledToDpi = true
@@ -95,6 +93,10 @@ class LocationMap(
         currentMarker.isEnabled = false
 
         disallowParentScrollWhileTouched()
+    }
+
+    fun setStyle(style: MapStyle) {
+        mapView.setTileSource(style.tileSource)
     }
 
     fun setLocation(point: GeoPoint?) {

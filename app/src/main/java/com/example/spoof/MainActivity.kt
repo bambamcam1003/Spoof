@@ -123,6 +123,20 @@ class MainActivity : AppCompatActivity() {
         }
 
         findViewById<View>(R.id.myLocationButton).setOnClickListener { map.centerOnBest() }
+
+        val attributionText = findViewById<TextView>(R.id.attributionText)
+        val styleGroup = findViewById<MaterialButtonToggleGroup>(R.id.mapStyleGroup)
+        fun applyStyle(style: MapStyle) {
+            map.setStyle(style)
+            attributionText.text = style.attribution
+            prefs.edit { putString(KEY_MAP_STYLE, style.name) }
+        }
+        val initialStyle = MapStyle.fromName(prefs.getString(KEY_MAP_STYLE, null))
+        styleGroup.check(initialStyle.buttonId)
+        applyStyle(initialStyle)
+        styleGroup.addOnButtonCheckedListener { _, checkedId, isChecked ->
+            if (isChecked) applyStyle(MapStyle.fromButtonId(checkedId))
+        }
     }
 
     override fun onResume() {
@@ -224,6 +238,7 @@ class MainActivity : AppCompatActivity() {
         private const val KEY_SPEED = "speed"
         private const val KEY_ACCURACY = "accuracy"
         private const val KEY_JITTER = "jitter"
+        private const val KEY_MAP_STYLE = "map_style"
 
         /** Parses "lat, lng" (or "lat lng"), as copied from Google Maps. */
         fun parseLatLng(text: String): Pair<Double, Double>? {

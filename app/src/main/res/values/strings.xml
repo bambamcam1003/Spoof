@@ -17,5 +17,8 @@
     <string name="marker_location">Location</string>
     <string name="marker_destination">Destination</string>
     <string name="marker_current">Mocked position</string>
-    <string name="map_attribution">Map data © OpenStreetMap contributors. Long-press and drag a marker to move it; tap the destination flag to clear it.</string>
+    <string name="map_help">Long-press and drag a marker to move it; tap the destination flag to clear it.</string>
+    <string name="style_streets">Streets</string>
+    <string name="style_satellite">Satellite</string>
+    <string name="style_osm">OSM</string>
 </resources>

@@ -10,9 +10,9 @@ the fake position.
 
 ## Features
 
-- Map picker (OpenStreetMap, no API key needed) — tap to set the location or
-  destination, long-press and drag markers to adjust, and watch the live mocked
-  position move along the route
+- Map picker (no API key needed) — tap to set the location or destination,
+  long-press and drag markers to adjust, and watch the live mocked position move
+  along the route. Switch between Streets and Satellite (Esri) or OSM (HOT style)
 - Fixed location — or paste `lat, lng` straight from Google Maps
 - Route simulation — set a destination and a speed (m/s) and the location moves
   toward it in a straight line, with bearing and speed populated
@@ -66,8 +66,10 @@ only affects the GPS provider; Spoof also works on physical devices.
 
 ## Notes
 
-- The map needs internet access to load tiles (from openstreetmap.org, cached
-  locally). Mocking itself works offline.
+- The map needs internet access to load tiles (from Esri's ArcGIS Online or
+  OpenStreetMap France, cached locally). Mocking itself works offline. These are
+  free public tile services; they're fine for a debug tool but check their terms
+  before shipping anything built on them.
 
 - Locations delivered by test providers have `Location.isMock()`
   (`isFromMockProvider()` on older APIs) set to `true`. If your app rejects mock
