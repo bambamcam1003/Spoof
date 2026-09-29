@@ -8,7 +8,14 @@
     <string name="start">Start</string>
     <string name="stop">Stop</string>
     <string name="open_dev_options">Open Developer options</string>
-    <string name="setup_help">Setup: enable Developer options, then set \"Select mock location app\" to Spoof. Paste coordinates straight from Google Maps (e.g. 37.4220, -122.0841). If a destination is set, the location moves toward it at the given speed.</string>
+    <string name="setup_help">Setup: enable Developer options, then set \"Select mock location app\" to Spoof. Tap the map or paste coordinates from Google Maps (e.g. 37.4220, -122.0841). If a destination is set, the location moves toward it at the given speed.</string>
     <string name="channel_name">Mock location</string>
     <string name="status_idle">Idle</string>
+    <string name="tap_sets_location">Tap sets location</string>
+    <string name="tap_sets_destination">Tap sets destination</string>
+    <string name="center_on_location">Center on location</string>
+    <string name="marker_location">Location</string>
+    <string name="marker_destination">Destination</string>
+    <string name="marker_current">Mocked position</string>
+    <string name="map_attribution">Map data © OpenStreetMap contributors. Long-press and drag a marker to move it; tap the destination flag to clear it.</string>
 </resources>

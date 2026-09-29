@@ -10,13 +10,18 @@ object Status {
     var message = ""
         private set
 
+    /** Last position pushed to the test providers, or null when not mocking. */
+    var position: Pair<Double, Double>? = null
+        private set
+
     private val listeners = mutableSetOf<() -> Unit>()
     private val main = Handler(Looper.getMainLooper())
 
-    fun update(running: Boolean, message: String) {
+    fun update(running: Boolean, message: String, position: Pair<Double, Double>? = null) {
         main.post {
             this.running = running
             this.message = message
+            this.position = position
             listeners.toList().forEach { it() }
         }
     }

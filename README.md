@@ -10,7 +10,10 @@ the fake position.
 
 ## Features
 
-- Fixed location — paste `lat, lng` straight from Google Maps
+- Map picker (OpenStreetMap, no API key needed) — tap to set the location or
+  destination, long-press and drag markers to adjust, and watch the live mocked
+  position move along the route
+- Fixed location — or paste `lat, lng` straight from Google Maps
 - Route simulation — set a destination and a speed (m/s) and the location moves
   toward it in a straight line, with bearing and speed populated
 - Configurable accuracy and random jitter (to test filtering/smoothing code)
@@ -31,7 +34,7 @@ Or open the project in Android Studio and run it.
 
 1. Enable **Developer options** (Settings → About phone → tap *Build number* 7 times).
 2. Developer options → **Select mock location app** → choose **Spoof**.
-3. Open Spoof, enter a location, tap **Start**, and grant the location /
+3. Open Spoof, tap the map (or type coordinates) to pick a location, tap **Start**, and grant the location /
    notification permissions it asks for.
 
 If you forget step 2, the status line will say so.
@@ -62,6 +65,9 @@ On an emulator you can alternatively use `adb emu geo fix <lng> <lat>`, but that
 only affects the GPS provider; Spoof also works on physical devices.
 
 ## Notes
+
+- The map needs internet access to load tiles (from openstreetmap.org, cached
+  locally). Mocking itself works offline.
 
 - Locations delivered by test providers have `Location.isMock()`
   (`isFromMockProvider()` on older APIs) set to `true`. If your app rejects mock

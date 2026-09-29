@@ -232,7 +232,11 @@ class MockLocationService : Service() {
         }
 
         val text = "%.6f, %.6f%s".format(outLat, outLng, if (moving) "  (moving)" else "")
-        Status.update(true, "Mocking: $text\nProviders: ${installedProviders.joinToString()}")
+        Status.update(
+            true,
+            "Mocking: $text\nProviders: ${installedProviders.joinToString()}",
+            outLat to outLng
+        )
         getSystemService(NotificationManager::class.java)
             .notify(NOTIFICATION_ID, buildNotification(text))
     }
