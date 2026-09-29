@@ -1,0 +1,14 @@
+<resources>
+    <string name="app_name">Spoof</string>
+    <string name="location_hint">Location (lat, lng)</string>
+    <string name="destination_hint">Destination (lat, lng) — optional</string>
+    <string name="speed_hint">Speed (m/s)</string>
+    <string name="accuracy_hint">Accuracy (m)</string>
+    <string name="jitter_hint">Jitter (m)</string>
+    <string name="start">Start</string>
+    <string name="stop">Stop</string>
+    <string name="open_dev_options">Open Developer options</string>
+    <string name="setup_help">Setup: enable Developer options, then set \"Select mock location app\" to Spoof. Paste coordinates straight from Google Maps (e.g. 37.4220, -122.0841). If a destination is set, the location moves toward it at the given speed.</string>
+    <string name="channel_name">Mock location</string>
+    <string name="status_idle">Idle</string>
+</resources>
