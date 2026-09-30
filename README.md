@@ -16,7 +16,7 @@ the fake position.
 - Fixed location — or paste `lat, lng` straight from Google Maps
 - Route simulation — set a destination and a speed (mph) and the location moves
   toward it in a straight line, with bearing and speed populated
-- Configurable accuracy and random jitter, in feet, (to test filtering/smoothing code)
+- Configurable accuracy and random jitter in feet (to test filtering/smoothing code)
 - Foreground-service notification with a Stop button
 - Scriptable from `adb` for automated tests
 
