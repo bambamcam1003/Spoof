@@ -2,9 +2,9 @@
     <string name="app_name">Spoof</string>
     <string name="location_hint">Location (lat, lng)</string>
     <string name="destination_hint">Destination (lat, lng) — optional</string>
-    <string name="speed_hint">Speed (m/s)</string>
-    <string name="accuracy_hint">Accuracy (m)</string>
-    <string name="jitter_hint">Jitter (m)</string>
+    <string name="speed_hint">Speed (mph)</string>
+    <string name="accuracy_hint">Accuracy (ft)</string>
+    <string name="jitter_hint">Jitter (ft)</string>
     <string name="start">Start</string>
     <string name="stop">Stop</string>
     <string name="open_dev_options">Open Developer options</string>

@@ -231,7 +231,14 @@ class MockLocationService : Service() {
             }
         }
 
-        val text = "%.6f, %.6f%s".format(outLat, outLng, if (moving) "  (moving)" else "")
+        val coords = "%.6f, %.6f".format(outLat, outLng)
+        val text = if (moving) {
+            val remaining = distanceMeters(lat, lng, destLat!!, destLng!!)
+            "$coords\n${Units.formatSpeed(speed.toDouble())}, " +
+                "${Units.formatDistance(remaining)} to go"
+        } else {
+            coords
+        }
         Status.update(
             true,
             "Mocking: $text\nProviders: ${installedProviders.joinToString()}",
@@ -277,6 +284,7 @@ class MockLocationService : Service() {
             .setSmallIcon(R.drawable.ic_pin)
             .setContentTitle("Mocking location")
             .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setContentIntent(openApp)

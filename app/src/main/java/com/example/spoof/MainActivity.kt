@@ -66,8 +66,8 @@ class MainActivity : AppCompatActivity() {
 
         locationInput.setText(prefs.getString(KEY_LOCATION, "37.422000, -122.084100"))
         destinationInput.setText(prefs.getString(KEY_DESTINATION, ""))
-        speedInput.setText(prefs.getString(KEY_SPEED, "1.4"))
-        accuracyInput.setText(prefs.getString(KEY_ACCURACY, "5"))
+        speedInput.setText(prefs.getString(KEY_SPEED, "3"))
+        accuracyInput.setText(prefs.getString(KEY_ACCURACY, "16"))
         jitterInput.setText(prefs.getString(KEY_JITTER, "0"))
 
         setUpMap()
@@ -211,9 +211,19 @@ class MainActivity : AppCompatActivity() {
             .setAction(MockLocationService.ACTION_START)
             .putExtra(MockLocationService.EXTRA_LAT, start.first)
             .putExtra(MockLocationService.EXTRA_LNG, start.second)
-            .putExtra(MockLocationService.EXTRA_SPEED, speedInput.text.toString().toDoubleOrNull() ?: 0.0)
-            .putExtra(MockLocationService.EXTRA_ACCURACY, accuracyInput.text.toString().toDoubleOrNull() ?: 5.0)
-            .putExtra(MockLocationService.EXTRA_JITTER, jitterInput.text.toString().toDoubleOrNull() ?: 0.0)
+            // The UI is in mph / feet; the service takes m/s / meters.
+            .putExtra(
+                MockLocationService.EXTRA_SPEED,
+                Units.mphToMetersPerSecond(speedInput.text.toString().toDoubleOrNull() ?: 0.0)
+            )
+            .putExtra(
+                MockLocationService.EXTRA_ACCURACY,
+                Units.feetToMeters(accuracyInput.text.toString().toDoubleOrNull() ?: 16.0)
+            )
+            .putExtra(
+                MockLocationService.EXTRA_JITTER,
+                Units.feetToMeters(jitterInput.text.toString().toDoubleOrNull() ?: 0.0)
+            )
         if (dest != null) {
             intent.putExtra(MockLocationService.EXTRA_DEST_LAT, dest.first)
             intent.putExtra(MockLocationService.EXTRA_DEST_LNG, dest.second)
@@ -235,9 +245,9 @@ class MainActivity : AppCompatActivity() {
 
         private const val KEY_LOCATION = "location"
         private const val KEY_DESTINATION = "destination"
-        private const val KEY_SPEED = "speed"
-        private const val KEY_ACCURACY = "accuracy"
-        private const val KEY_JITTER = "jitter"
+        private const val KEY_SPEED = "speed_mph"
+        private const val KEY_ACCURACY = "accuracy_ft"
+        private const val KEY_JITTER = "jitter_ft"
         private const val KEY_MAP_STYLE = "map_style"
 
         /** Parses "lat, lng" (or "lat lng"), as copied from Google Maps. */

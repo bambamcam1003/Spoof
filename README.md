@@ -14,9 +14,9 @@ the fake position.
   long-press and drag markers to adjust, and watch the live mocked position move
   along the route. Switch between Streets and Satellite (Esri) or OSM (HOT style)
 - Fixed location — or paste `lat, lng` straight from Google Maps
-- Route simulation — set a destination and a speed (m/s) and the location moves
+- Route simulation — set a destination and a speed (mph) and the location moves
   toward it in a straight line, with bearing and speed populated
-- Configurable accuracy and random jitter (to test filtering/smoothing code)
+- Configurable accuracy and random jitter, in feet, (to test filtering/smoothing code)
 - Foreground-service notification with a Stop button
 - Scriptable from `adb` for automated tests
 
@@ -41,6 +41,9 @@ If you forget step 2, the status line will say so.
 
 ## Driving it from adb
 
+The app's screen uses imperial units, but adb extras are metric (`speed` in
+m/s, `accuracy` and `jitter` in meters), matching Android's location APIs.
+
 The service only accepts commands from the shell (it's protected by the `DUMP`
 permission), so other apps on the device can't control it.
 
@@ -49,7 +52,7 @@ permission), so other apps on the device can't control it.
 adb shell am start-foreground-service -n com.example.spoof/.MockLocationService \
   -a com.example.spoof.START --ed lat 37.4220 --ed lng -122.0841
 
-# Walk from A to B at 1.4 m/s with 5 m accuracy and 3 m jitter
+# Walk from A to B at 1.4 m/s (~3 mph) with 5 m (~16 ft) accuracy and 3 m (~10 ft) jitter
 adb shell am start-foreground-service -n com.example.spoof/.MockLocationService \
   -a com.example.spoof.START \
   --ed lat 37.4220 --ed lng -122.0841 \
