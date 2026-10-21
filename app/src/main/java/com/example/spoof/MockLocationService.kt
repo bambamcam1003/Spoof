@@ -28,7 +28,7 @@ import kotlin.random.Random
 
 /**
  * Foreground service that registers test providers and pushes a mock location to them
- * once per second. Optionally moves in a straight line toward a destination.
+ * once per second. Optionally follows a path of waypoints, each leg at its own speed.
  */
 class MockLocationService : Service() {
 
@@ -38,9 +38,9 @@ class MockLocationService : Service() {
 
     private var lat = 0.0
     private var lng = 0.0
-    private var destLat: Double? = null
-    private var destLng: Double? = null
-    private var speed = 0f
+    /** Waypoints still to visit, speeds in m/s; the first is the one being moved toward. */
+    private var path = ArrayDeque<Waypoint>()
+    private var legCount = 0
     private var accuracy = DEFAULT_ACCURACY
     private var jitter = 0f
     private var bearing = 0f
@@ -76,9 +76,8 @@ class MockLocationService : Service() {
 
         lat = intent.getNumberExtra(EXTRA_LAT)!!
         lng = intent.getNumberExtra(EXTRA_LNG)!!
-        destLat = intent.getNumberExtra(EXTRA_DEST_LAT)
-        destLng = intent.getNumberExtra(EXTRA_DEST_LNG)
-        speed = intent.getNumberExtra(EXTRA_SPEED)?.toFloat() ?: 0f
+        path = ArrayDeque(readPath(intent))
+        legCount = path.size
         accuracy = intent.getNumberExtra(EXTRA_ACCURACY)?.toFloat() ?: DEFAULT_ACCURACY
         jitter = intent.getNumberExtra(EXTRA_JITTER)?.toFloat() ?: 0f
         lastTickMs = SystemClock.elapsedRealtime()
@@ -169,26 +168,62 @@ class MockLocationService : Service() {
         installedProviders.clear()
     }
 
-    /** Moves the current position toward the destination based on elapsed time. */
+    /**
+     * Reads the path from [EXTRA_PATH], falling back to a single leg built from
+     * [EXTRA_DEST_LAT] / [EXTRA_DEST_LNG] / [EXTRA_SPEED].
+     */
+    private fun readPath(intent: Intent): List<Waypoint> {
+        intent.getStringExtra(EXTRA_PATH)?.let { text ->
+            Waypoint.decode(text)?.let { return it }
+            Log.w(TAG, "Ignoring malformed path extra: $text")
+        }
+        val dLat = intent.getNumberExtra(EXTRA_DEST_LAT) ?: return emptyList()
+        val dLng = intent.getNumberExtra(EXTRA_DEST_LNG) ?: return emptyList()
+        // Without a speed the old single-destination mode stayed put rather than jumping.
+        val speed = intent.getNumberExtra(EXTRA_SPEED)?.takeIf { it > 0 } ?: return emptyList()
+        return listOf(Waypoint(dLat, dLng, speed))
+    }
+
+    /**
+     * Moves the current position along the path based on elapsed time. Time left over after
+     * reaching a waypoint carries into the next leg at that leg's speed; a leg with no speed
+     * is jumped straight to its end.
+     */
     private fun advance() {
         val now = SystemClock.elapsedRealtime()
-        val dtSec = (now - lastTickMs) / 1000.0
+        var dtSec = (now - lastTickMs) / 1000.0
         lastTickMs = now
 
-        val dLat = destLat ?: return
-        val dLng = destLng ?: return
-        if (speed <= 0f) return
-
-        val remaining = distanceMeters(lat, lng, dLat, dLng)
-        if (remaining < 0.5) {
-            lat = dLat
-            lng = dLng
+        while (path.isNotEmpty()) {
+            val next = path.first()
+            val remaining = distanceMeters(lat, lng, next.lat, next.lng)
+            if (remaining >= 0.5) bearing = bearingDegrees(lat, lng, next.lat, next.lng)
+            val needed = if (next.speed > 0) remaining / next.speed else 0.0
+            if (remaining < 0.5 || needed <= dtSec) {
+                lat = next.lat
+                lng = next.lng
+                path.removeFirst()
+                dtSec -= needed
+                continue
+            }
+            val fraction = min(1.0, next.speed * dtSec / remaining)
+            lat += (next.lat - lat) * fraction
+            lng += (next.lng - lng) * fraction
             return
         }
-        bearing = bearingDegrees(lat, lng, dLat, dLng)
-        val fraction = min(1.0, speed * dtSec / remaining)
-        lat += (dLat - lat) * fraction
-        lng += (dLng - lng) * fraction
+    }
+
+    /** Distance from the current position to the end of the path. */
+    private fun remainingMeters(): Double {
+        var total = 0.0
+        var fromLat = lat
+        var fromLng = lng
+        for (p in path) {
+            total += distanceMeters(fromLat, fromLng, p.lat, p.lng)
+            fromLat = p.lat
+            fromLng = p.lng
+        }
+        return total
     }
 
     private fun push() {
@@ -201,8 +236,9 @@ class MockLocationService : Service() {
             outLng += (r * sin(theta)) / (METERS_PER_DEGREE * cos(Math.toRadians(lat)))
         }
 
-        val moving = destLat != null && speed > 0f &&
-            distanceMeters(lat, lng, destLat!!, destLng!!) >= 0.5
+        val leg = path.firstOrNull()
+        val moving = leg != null
+        val speed = leg?.speed?.toFloat() ?: 0f
 
         for (provider in installedProviders) {
             val location = Location(provider).apply {
@@ -213,7 +249,7 @@ class MockLocationService : Service() {
                 time = System.currentTimeMillis()
                 elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
                 if (moving) {
-                    speed = this@MockLocationService.speed
+                    this.speed = speed
                     bearing = this@MockLocationService.bearing
                 }
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -233,9 +269,11 @@ class MockLocationService : Service() {
 
         val coords = "%.6f, %.6f".format(outLat, outLng)
         val text = if (moving) {
-            val remaining = distanceMeters(lat, lng, destLat!!, destLng!!)
-            "$coords\n${Units.formatSpeed(speed.toDouble())}, " +
-                "${Units.formatDistance(remaining)} to go"
+            val legNumber = legCount - path.size + 1
+            "$coords\nLeg $legNumber/$legCount at ${Units.formatSpeed(speed.toDouble())}, " +
+                "${Units.formatDistance(remainingMeters())} to go"
+        } else if (legCount > 0) {
+            "$coords\nArrived"
         } else {
             coords
         }
@@ -319,6 +357,9 @@ class MockLocationService : Service() {
         const val EXTRA_SPEED = "speed"
         const val EXTRA_ACCURACY = "accuracy"
         const val EXTRA_JITTER = "jitter"
+
+        /** Waypoints as "lat,lng,speed;…" with speeds in m/s; see [Waypoint.encode]. */
+        const val EXTRA_PATH = "path"
 
         fun distanceMeters(lat1: Double, lng1: Double, lat2: Double, lng2: Double): Double {
             val out = FloatArray(1)

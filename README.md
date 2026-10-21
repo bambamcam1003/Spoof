@@ -10,12 +10,14 @@ the fake position.
 
 ## Features
 
-- Map picker (no API key needed) — tap to set the location or destination,
+- Map picker (no API key needed) — tap to set the location or add waypoints,
   long-press and drag markers to adjust, and watch the live mocked position move
   along the route. Switch between Streets and Satellite (Esri) or OSM (HOT style)
 - Fixed location — or paste `lat, lng` straight from Google Maps
-- Route simulation — set a destination and a speed (mph) and the location moves
-  toward it in a straight line, with bearing and speed populated
+- Path simulation — plot any number of waypoints and give each leg its own speed
+  (mph); the location follows the path leg by leg, with bearing and speed
+  populated. The app shows each leg's distance plus the total distance and time,
+  and remembers the path between launches
 - Configurable accuracy and random jitter in feet (to test filtering/smoothing code)
 - Foreground-service notification with a Stop button
 - Scriptable from `adb` for automated tests
@@ -58,6 +60,12 @@ adb shell am start-foreground-service -n com.example.spoof/.MockLocationService 
   --ed lat 37.4220 --ed lng -122.0841 \
   --ed dest_lat 37.4275 --ed dest_lng -122.0800 \
   --ef speed 1.4 --ef accuracy 5 --ef jitter 3
+
+# Follow a path: "lat,lng,speed" per waypoint, separated by ";", speeds in m/s.
+# Walk to the first point at 1.4 m/s, then drive to the next two at 13.4 m/s (~30 mph).
+adb shell am start-foreground-service -n com.example.spoof/.MockLocationService \
+  -a com.example.spoof.START --ed lat 37.4220 --ed lng -122.0841 \
+  --es path '"37.4230,-122.0841,1.4;37.4275,-122.0800,13.4;37.4300,-122.0700,13.4"'
 
 # Stop
 adb shell am start-foreground-service -n com.example.spoof/.MockLocationService \

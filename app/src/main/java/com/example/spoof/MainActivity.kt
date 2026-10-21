@@ -11,7 +11,9 @@ import android.provider.Settings
 import android.text.Editable
 import android.view.View
 import android.text.TextWatcher
+import android.view.LayoutInflater
 import android.widget.EditText
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -26,13 +28,18 @@ import java.util.Locale
 class MainActivity : AppCompatActivity() {
 
     private lateinit var locationInput: EditText
-    private lateinit var destinationInput: EditText
     private lateinit var speedInput: EditText
     private lateinit var accuracyInput: EditText
     private lateinit var jitterInput: EditText
     private lateinit var statusText: TextView
     private lateinit var tapModeGroup: MaterialButtonToggleGroup
     private lateinit var map: LocationMap
+    private lateinit var waypointList: LinearLayout
+    private lateinit var pathTitle: TextView
+    private lateinit var pathEmptyText: TextView
+
+    /** The path to follow after the start location; speeds are in mph. */
+    private val waypoints = mutableListOf<Waypoint>()
 
     private val prefs by lazy { getSharedPreferences("spoof", Context.MODE_PRIVATE) }
     private val statusListener: () -> Unit = { renderStatus() }
@@ -58,19 +65,18 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         locationInput = findViewById(R.id.locationInput)
-        destinationInput = findViewById(R.id.destinationInput)
         speedInput = findViewById(R.id.speedInput)
         accuracyInput = findViewById(R.id.accuracyInput)
         jitterInput = findViewById(R.id.jitterInput)
         statusText = findViewById(R.id.statusText)
 
         locationInput.setText(prefs.getString(KEY_LOCATION, "37.422000, -122.084100"))
-        destinationInput.setText(prefs.getString(KEY_DESTINATION, ""))
         speedInput.setText(prefs.getString(KEY_SPEED, "3"))
         accuracyInput.setText(prefs.getString(KEY_ACCURACY, "16"))
         jitterInput.setText(prefs.getString(KEY_JITTER, "0"))
 
         setUpMap()
+        setUpPath()
 
         findViewById<TextView>(R.id.startButton).setOnClickListener { onStartClicked() }
         findViewById<TextView>(R.id.stopButton).setOnClickListener {
@@ -97,27 +103,30 @@ class MainActivity : AppCompatActivity() {
         map = LocationMap(
             findViewById<MapView>(R.id.mapView),
             onTap = { point ->
-                val input = if (tapModeGroup.checkedButtonId == R.id.tapDestinationButton) {
-                    destinationInput
+                if (tapModeGroup.checkedButtonId == R.id.tapWaypointButton) {
+                    waypoints += Waypoint(point.latitude, point.longitude, defaultSpeedMph())
+                    onPathChanged()
                 } else {
-                    locationInput
+                    locationInput.setText(formatLatLng(point))
                 }
-                input.setText(formatLatLng(point))
             },
             onLocationDragged = { locationInput.setText(formatLatLng(it)) },
-            onDestinationDragged = { destinationInput.setText(formatLatLng(it)) },
-            onDestinationCleared = { destinationInput.setText("") },
+            onWaypointDragged = { i, point ->
+                waypoints[i] = waypoints[i].copy(lat = point.latitude, lng = point.longitude)
+                onPathChanged()
+            },
+            onWaypointClicked = { i ->
+                waypoints.removeAt(i)
+                onPathChanged()
+            },
         )
 
-        // Keep the markers in sync with whatever is typed or pasted into the fields.
+        // Keep the marker in sync with whatever is typed or pasted into the field.
         locationInput.addTextChangedListener(afterTextChanged {
             map.setLocation(parseLatLng(it)?.toGeoPoint())
-        })
-        destinationInput.addTextChangedListener(afterTextChanged {
-            map.setDestination(parseLatLng(it)?.toGeoPoint())
+            renderPath()
         })
         map.setLocation(parseLatLng(locationInput.text.toString())?.toGeoPoint())
-        map.setDestination(parseLatLng(destinationInput.text.toString())?.toGeoPoint())
         parseLatLng(locationInput.text.toString())?.let {
             map.centerOn(it.toGeoPoint())
         }
@@ -136,6 +145,97 @@ class MainActivity : AppCompatActivity() {
         applyStyle(initialStyle)
         styleGroup.addOnButtonCheckedListener { _, checkedId, isChecked ->
             if (isChecked) applyStyle(MapStyle.fromButtonId(checkedId))
+        }
+    }
+
+    private fun setUpPath() {
+        waypointList = findViewById(R.id.waypointList)
+        pathTitle = findViewById(R.id.pathTitle)
+        pathEmptyText = findViewById(R.id.pathEmptyText)
+
+        waypoints += loadPath()
+        findViewById<View>(R.id.fitPathButton).setOnClickListener { map.zoomToPath() }
+        findViewById<View>(R.id.clearPathButton).setOnClickListener {
+            waypoints.clear()
+            onPathChanged()
+        }
+        onPathChanged()
+    }
+
+    private fun loadPath(): List<Waypoint> {
+        prefs.getString(KEY_PATH, null)?.let { return Waypoint.decode(it).orEmpty() }
+        // Migrate the single destination saved by older versions.
+        val dest = parseLatLng(prefs.getString(KEY_DESTINATION, "").orEmpty())
+            ?: return emptyList()
+        return listOf(Waypoint(dest.first, dest.second, defaultSpeedMph()))
+    }
+
+    private fun defaultSpeedMph() =
+        speedInput.text.toString().toDoubleOrNull()?.takeIf { it > 0 } ?: DEFAULT_SPEED_MPH
+
+    /** Saves the path and rebuilds the map overlay and the waypoint rows. */
+    private fun onPathChanged() {
+        prefs.edit { putString(KEY_PATH, Waypoint.encode(waypoints)) }
+        map.setWaypoints(waypoints.map { GeoPoint(it.lat, it.lng) })
+
+        waypointList.removeAllViews()
+        val inflater = LayoutInflater.from(this)
+        waypoints.forEachIndexed { i, wp ->
+            val row = inflater.inflate(R.layout.item_waypoint, waypointList, false)
+            val speed = row.findViewById<EditText>(R.id.waypointSpeed)
+            speed.setText(formatSpeed(wp.speed))
+            speed.addTextChangedListener(afterTextChanged {
+                val mph = it.toDoubleOrNull()
+                speed.error = if (mph != null && mph > 0) null else getString(R.string.speed_required)
+                if (mph != null && mph > 0 && waypoints.getOrNull(i) != null) {
+                    waypoints[i] = waypoints[i].copy(speed = mph)
+                    prefs.edit { putString(KEY_PATH, Waypoint.encode(waypoints)) }
+                    renderPath()
+                }
+            })
+            row.findViewById<View>(R.id.waypointRemove).apply {
+                contentDescription = getString(R.string.remove_waypoint, i + 1)
+                setOnClickListener {
+                    waypoints.removeAt(i)
+                    onPathChanged()
+                }
+            }
+            waypointList.addView(row)
+        }
+        renderPath()
+    }
+
+    /** Refreshes the leg distances and the path's total distance and time. */
+    private fun renderPath() {
+        pathEmptyText.visibility = if (waypoints.isEmpty()) View.VISIBLE else View.GONE
+        var from = parseLatLng(locationInput.text.toString())
+        var totalMeters = 0.0
+        var totalSeconds = 0.0
+        waypoints.forEachIndexed { i, wp ->
+            val meters = from?.let {
+                MockLocationService.distanceMeters(it.first, it.second, wp.lat, wp.lng)
+            }
+            if (meters != null) {
+                totalMeters += meters
+                if (wp.speed > 0) totalSeconds += meters / Units.mphToMetersPerSecond(wp.speed)
+            }
+            waypointList.getChildAt(i)?.findViewById<TextView>(R.id.waypointLabel)?.text =
+                getString(
+                    R.string.waypoint_label,
+                    i + 1,
+                    formatLatLng(GeoPoint(wp.lat, wp.lng)),
+                    meters?.let { Units.formatDistance(it) } ?: "?",
+                )
+            from = wp.lat to wp.lng
+        }
+        pathTitle.text = if (waypoints.isEmpty()) {
+            getString(R.string.path_title)
+        } else {
+            getString(
+                R.string.path_summary,
+                Units.formatDistance(totalMeters),
+                formatDuration(totalSeconds),
+            )
         }
     }
 
@@ -168,7 +268,6 @@ class MainActivity : AppCompatActivity() {
     private fun onStartClicked() {
         prefs.edit {
             putString(KEY_LOCATION, locationInput.text.toString())
-            putString(KEY_DESTINATION, destinationInput.text.toString())
             putString(KEY_SPEED, speedInput.text.toString())
             putString(KEY_ACCURACY, accuracyInput.text.toString())
             putString(KEY_JITTER, jitterInput.text.toString())
@@ -200,10 +299,11 @@ class MainActivity : AppCompatActivity() {
             locationInput.error = "Enter as: lat, lng"
             return
         }
-        val destText = destinationInput.text.toString()
-        val dest = if (destText.isBlank()) null else parseLatLng(destText)
-        if (destText.isNotBlank() && dest == null) {
-            destinationInput.error = "Enter as: lat, lng"
+        val badSpeed = (0 until waypointList.childCount).any {
+            waypointList.getChildAt(it).findViewById<EditText>(R.id.waypointSpeed).error != null
+        }
+        if (badSpeed || waypoints.any { it.speed <= 0 }) {
+            Toast.makeText(this, R.string.speed_required, Toast.LENGTH_LONG).show()
             return
         }
 
@@ -213,8 +313,10 @@ class MainActivity : AppCompatActivity() {
             .putExtra(MockLocationService.EXTRA_LNG, start.second)
             // The UI is in mph / feet; the service takes m/s / meters.
             .putExtra(
-                MockLocationService.EXTRA_SPEED,
-                Units.mphToMetersPerSecond(speedInput.text.toString().toDoubleOrNull() ?: 0.0)
+                MockLocationService.EXTRA_PATH,
+                Waypoint.encode(
+                    waypoints.map { it.copy(speed = Units.mphToMetersPerSecond(it.speed)) }
+                )
             )
             .putExtra(
                 MockLocationService.EXTRA_ACCURACY,
@@ -224,10 +326,6 @@ class MainActivity : AppCompatActivity() {
                 MockLocationService.EXTRA_JITTER,
                 Units.feetToMeters(jitterInput.text.toString().toDoubleOrNull() ?: 0.0)
             )
-        if (dest != null) {
-            intent.putExtra(MockLocationService.EXTRA_DEST_LAT, dest.first)
-            intent.putExtra(MockLocationService.EXTRA_DEST_LNG, dest.second)
-        }
         ContextCompat.startForegroundService(this, intent)
     }
 
@@ -237,6 +335,21 @@ class MainActivity : AppCompatActivity() {
         private fun formatLatLng(p: GeoPoint) =
             String.format(Locale.US, "%.6f, %.6f", p.latitude, p.longitude)
 
+        private fun formatSpeed(mph: Double) =
+            String.format(Locale.US, "%.2f", mph).trimEnd('0').trimEnd('.')
+
+        private fun formatDuration(seconds: Double): String {
+            val total = seconds.toLong()
+            val h = total / 3600
+            val m = total % 3600 / 60
+            val s = total % 60
+            return when {
+                h > 0 -> String.format(Locale.US, "%dh %02dm", h, m)
+                m > 0 -> String.format(Locale.US, "%dm %02ds", m, s)
+                else -> "${s}s"
+            }
+        }
+
         private fun afterTextChanged(block: (String) -> Unit) = object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
@@ -244,11 +357,14 @@ class MainActivity : AppCompatActivity() {
         }
 
         private const val KEY_LOCATION = "location"
+        /** Only read, to migrate the single destination saved by older versions. */
         private const val KEY_DESTINATION = "destination"
+        private const val KEY_PATH = "path_mph"
         private const val KEY_SPEED = "speed_mph"
         private const val KEY_ACCURACY = "accuracy_ft"
         private const val KEY_JITTER = "jitter_ft"
         private const val KEY_MAP_STYLE = "map_style"
+        private const val DEFAULT_SPEED_MPH = 3.0
 
         /** Parses "lat, lng" (or "lat lng"), as copied from Google Maps. */
         fun parseLatLng(text: String): Pair<Double, Double>? {

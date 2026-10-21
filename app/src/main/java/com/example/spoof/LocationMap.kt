@@ -2,9 +2,15 @@ package com.example.spoof
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.drawable.BitmapDrawable
+import android.graphics.drawable.Drawable
 import androidx.core.content.ContextCompat
 import org.osmdroid.config.Configuration
 import org.osmdroid.events.MapEventsReceiver
+import org.osmdroid.util.BoundingBox
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.CustomZoomButtonsController
 import org.osmdroid.views.MapView
@@ -14,17 +20,17 @@ import org.osmdroid.views.overlay.Polyline
 import java.io.File
 
 /**
- * Wraps an osmdroid [MapView] used to pick the mock location and destination.
+ * Wraps an osmdroid [MapView] used to pick the mock location and the path's waypoints.
  *
- * Taps call [onTap]; dragging a marker calls [onLocationDragged] / [onDestinationDragged];
- * tapping the destination flag calls [onDestinationCleared].
+ * Taps call [onTap]; dragging a marker calls [onLocationDragged] / [onWaypointDragged];
+ * tapping a numbered waypoint calls [onWaypointClicked]. Waypoint indexes are 0-based.
  */
 class LocationMap(
     private val mapView: MapView,
     private val onTap: (GeoPoint) -> Unit,
     private val onLocationDragged: (GeoPoint) -> Unit,
-    private val onDestinationDragged: (GeoPoint) -> Unit,
-    private val onDestinationCleared: () -> Unit,
+    private val onWaypointDragged: (Int, GeoPoint) -> Unit,
+    private val onWaypointClicked: (Int) -> Unit,
 ) {
     private val context = mapView.context
 
@@ -33,19 +39,6 @@ class LocationMap(
         outlinePaint.strokeWidth = 8f
         isEnabled = false
         setOnClickListener { _, _, _ -> false }
-    }
-
-    private val destinationMarker = Marker(mapView).apply {
-        icon = ContextCompat.getDrawable(context, R.drawable.ic_flag)
-        // The flagpole's foot is at the lower-left of the icon.
-        setAnchor(0.22f, 0.9f)
-        title = context.getString(R.string.marker_destination)
-        isDraggable = true
-        setOnMarkerDragListener(dragListener { onDestinationDragged(it) })
-        setOnMarkerClickListener { _, _ ->
-            onDestinationCleared()
-            true
-        }
     }
 
     private val locationMarker = Marker(mapView).apply {
@@ -64,8 +57,9 @@ class LocationMap(
         setOnMarkerClickListener { _, _ -> true }
     }
 
+    private val waypointMarkers = mutableListOf<Marker>()
+
     private var hasLocation = false
-    private var hasDestination = false
     private var hasCurrent = false
 
     init {
@@ -86,9 +80,8 @@ class LocationMap(
         mapView.overlays.add(events)
         mapView.overlays.add(route)
         mapView.overlays.add(currentMarker)
-        mapView.overlays.add(destinationMarker)
+        // Waypoint markers are inserted here, between the live dot and the location pin.
         mapView.overlays.add(locationMarker)
-        destinationMarker.isEnabled = false
         locationMarker.isEnabled = false
         currentMarker.isEnabled = false
 
@@ -106,10 +99,16 @@ class LocationMap(
         refreshRoute()
     }
 
-    fun setDestination(point: GeoPoint?) {
-        hasDestination = point != null
-        destinationMarker.isEnabled = hasDestination
-        if (point != null) destinationMarker.position = point
+    fun setWaypoints(points: List<GeoPoint>) {
+        while (waypointMarkers.size > points.size) {
+            mapView.overlays.remove(waypointMarkers.removeAt(waypointMarkers.lastIndex))
+        }
+        while (waypointMarkers.size < points.size) {
+            val marker = newWaypointMarker(waypointMarkers.size)
+            mapView.overlays.add(mapView.overlays.indexOf(locationMarker), marker)
+            waypointMarkers += marker
+        }
+        points.forEachIndexed { i, p -> waypointMarkers[i].position = p }
         refreshRoute()
     }
 
@@ -133,16 +132,59 @@ class LocationMap(
         }
     }
 
+    /** Zooms to show the location and every waypoint. */
+    fun zoomToPath() {
+        val points = waypointMarkers.map { it.position } +
+            listOfNotNull(locationMarker.position.takeIf { hasLocation })
+        if (points.size < 2) {
+            points.firstOrNull()?.let { centerOn(it) }
+            return
+        }
+        mapView.zoomToBoundingBox(BoundingBox.fromGeoPoints(points).increaseByScale(1.3f), true)
+    }
+
     fun onResume() = mapView.onResume()
 
     fun onPause() = mapView.onPause()
 
     private fun refreshRoute() {
-        route.isEnabled = hasLocation && hasDestination
+        route.isEnabled = hasLocation && waypointMarkers.isNotEmpty()
         if (route.isEnabled) {
-            route.setPoints(listOf(locationMarker.position, destinationMarker.position))
+            route.setPoints(listOf(locationMarker.position) + waypointMarkers.map { it.position })
         }
         mapView.invalidate()
+    }
+
+    private fun newWaypointMarker(index: Int) = Marker(mapView).apply {
+        icon = numberedIcon(index + 1)
+        setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+        title = context.getString(R.string.marker_waypoint, index + 1)
+        isDraggable = true
+        setOnMarkerDragListener(dragListener { onWaypointDragged(index, it) })
+        setOnMarkerClickListener { _, _ ->
+            onWaypointClicked(index)
+            true
+        }
+    }
+
+    /** A filled circle with [number] in it, matching the route line's color. */
+    private fun numberedIcon(number: Int): Drawable {
+        val density = context.resources.displayMetrics.density
+        val size = (26 * density).toInt()
+        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        val r = size / 2f
+        paint.color = 0xFFFFFFFF.toInt()
+        canvas.drawCircle(r, r, r, paint)
+        paint.color = route.outlinePaint.color
+        canvas.drawCircle(r, r, r - 2 * density, paint)
+        paint.color = 0xFFFFFFFF.toInt()
+        paint.textAlign = Paint.Align.CENTER
+        paint.isFakeBoldText = true
+        paint.textSize = (if (number < 100) 13 else 10) * density
+        canvas.drawText(number.toString(), r, r - (paint.descent() + paint.ascent()) / 2, paint)
+        return BitmapDrawable(context.resources, bitmap)
     }
 
     private fun dragListener(onEnd: (GeoPoint) -> Unit) = object : Marker.OnMarkerDragListener {
